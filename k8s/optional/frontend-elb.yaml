@@ -1,0 +1,24 @@
+# OPTIONAL: expose the UI through a Huawei Cloud ELB instead of port-forward.
+# The agent can change the cluster after approval and the UI has no login,
+# so only use a PRIVATE (intranet) ELB reachable from your VPN/VPC, never a
+# public EIP, unless you put authentication in front of it.
+#
+# Apply after the base:  kubectl apply -f k8s/optional/frontend-elb.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-agent-frontend-elb
+  namespace: ai-agent
+  annotations:
+    # Dedicated ELB ("performance") or shared ELB ("union"); match your ELB.
+    kubernetes.io/elb.class: performance
+    # ID of an existing private ELB in the cluster's VPC.
+    kubernetes.io/elb.id: REPLACE_WITH_ELB_ID
+spec:
+  type: LoadBalancer
+  selector:
+    app: ai-agent-frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3000

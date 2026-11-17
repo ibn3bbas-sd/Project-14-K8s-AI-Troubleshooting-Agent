@@ -1,0 +1,34 @@
+# OPTIONAL: restrict traffic inside the ai-agent namespace. NetworkPolicy is
+# enforced on CCE clusters using the container tunnel network or Cloud Native
+# Network 2.0 (check your cluster's network model before relying on it).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-from-backend-only
+  namespace: ai-agent
+spec:
+  podSelector:
+    matchLabels: { app: ai-agent-postgres }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app: ai-agent-backend }
+      ports:
+        - port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-from-frontend-only
+  namespace: ai-agent
+spec:
+  podSelector:
+    matchLabels: { app: ai-agent-backend }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app: ai-agent-frontend }
+      ports:
+        - port: 8000

@@ -1,0 +1,78 @@
+# Session store. One replica on an EVS disk (Everest CSI). csi-disk-topology
+# waits for the pod to be scheduled before creating the disk, so the disk is
+# created in the same availability zone as the node.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-agent-postgres
+  labels: { app: ai-agent-postgres }
+spec:
+  clusterIP: None
+  selector: { app: ai-agent-postgres }
+  ports:
+    - name: postgres
+      port: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ai-agent-postgres
+spec:
+  serviceName: ai-agent-postgres
+  replicas: 1
+  selector:
+    matchLabels: { app: ai-agent-postgres }
+  template:
+    metadata:
+      labels: { app: ai-agent-postgres }
+    spec:
+      securityContext:
+        runAsUser: 70   # "postgres" user in the alpine image
+        runAsGroup: 70
+        fsGroup: 70
+      imagePullSecrets:
+        - name: default-secret
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_DB
+              value: agent
+            - name: POSTGRES_USER
+              value: agent
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: ai-agent-postgres, key: POSTGRES_PASSWORD }
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "agent", "-d", "agent"]
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "agent", "-d", "agent"]
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 512Mi }
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        annotations:
+          # EVS disk type. SAS works in most regions; use SSD/GPSSD/ESSD if SAS
+          # is not sold in yours (check the EVS console for the region).
+          everest.io/disk-volume-type: SAS
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: csi-disk-topology
+        resources:
+          requests:
+            storage: 10Gi

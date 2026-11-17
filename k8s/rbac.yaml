@@ -1,0 +1,115 @@
+# ServiceAccount for the backend. Two ClusterRoles:
+#   ai-agent-reader      read-only diagnostics (no Secrets)
+#   ai-agent-remediator  the narrow set of writes the write tools need
+# To run the agent read-only, delete the remediator ClusterRoleBinding (and set
+# ENABLE_WRITE_TOOLS=false in kustomization.yaml). To limit writes to some
+# namespaces, replace the remediator ClusterRoleBinding with RoleBindings in
+# those namespaces (node label/cordon then stops working, which is fine).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ai-agent-backend
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ai-agent-reader
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+      - pods/log
+      - services
+      - endpoints
+      - configmaps
+      - persistentvolumeclaims
+      - persistentvolumes
+      - nodes
+      - namespaces
+      - events
+      - serviceaccounts
+      - resourcequotas
+      - limitranges
+      - replicationcontrollers
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["events.k8s.io"]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ai-agent-remediator
+rules:
+  # delete_pod, recreate_pod
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create", "delete"]
+  # update_configmap, patch_resource (Service, ConfigMap, PVC)
+  - apiGroups: [""]
+    resources: ["configmaps", "services", "persistentvolumeclaims"]
+    verbs: ["patch"]
+  # cordon_node, label_node
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["patch"]
+  # restart/scale/image/resources/rollback/patch on workloads
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets"]
+    verbs: ["patch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["patch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["patch"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ai-agent-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ai-agent-reader
+subjects:
+  - kind: ServiceAccount
+    name: ai-agent-backend
+    namespace: ai-agent
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ai-agent-remediator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ai-agent-remediator
+subjects:
+  - kind: ServiceAccount
+    name: ai-agent-backend
+    namespace: ai-agent

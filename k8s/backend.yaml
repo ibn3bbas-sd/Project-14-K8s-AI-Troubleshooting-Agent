@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-agent-backend
+  labels: { app: ai-agent-backend }
+spec:
+  # Keep 1 replica: an agent run executes in the pod that received the request
+  # and a per-session lock lives in memory. Recreate avoids two pods mid-run.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: { app: ai-agent-backend }
+  template:
+    metadata:
+      labels: { app: ai-agent-backend }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: /metrics
+    spec:
+      serviceAccountName: ai-agent-backend
+      imagePullSecrets:
+        - name: default-secret
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: backend
+          image: ai-agent-backend
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: ai-agent-config
+          env:
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef: { name: ai-agent-anthropic, key: ANTHROPIC_API_KEY }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: ai-agent-postgres, key: POSTGRES_PASSWORD }
+            - name: DATABASE_URL
+              value: postgresql://agent:$(POSTGRES_PASSWORD)@ai-agent-postgres:5432/agent
+            - name: AGENT_NAMESPACE
+              valueFrom:
+                fieldRef: { fieldPath: metadata.namespace }
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 768Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-agent-backend
+  labels: { app: ai-agent-backend }
+spec:
+  selector: { app: ai-agent-backend }
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

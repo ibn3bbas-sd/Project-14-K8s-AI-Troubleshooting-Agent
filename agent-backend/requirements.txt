@@ -1,0 +1,7 @@
+anthropic==2.9.0
+fastapi==0.163.1
+uvicorn[standard]==0.54.0
+kubernetes==37.0.2
+psycopg[binary,pool]==3.3.9
+prometheus-client==0.26.0
+PyYAML>=6.0.2,<7

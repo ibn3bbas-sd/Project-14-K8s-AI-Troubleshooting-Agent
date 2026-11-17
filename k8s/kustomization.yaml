@@ -1,0 +1,51 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ai-agent
+
+resources:
+  - namespace.yaml
+  - rbac.yaml
+  - postgres.yaml
+  - backend.yaml
+  - frontend.yaml
+
+# Set these to your SWR registry: swr.<region>.myhuaweicloud.com/<organization>
+images:
+  - name: ai-agent-backend
+    newName: swr.REGION.myhuaweicloud.com/ORG/ai-agent-backend
+    newTag: latest
+  - name: ai-agent-frontend
+    newName: swr.REGION.myhuaweicloud.com/ORG/ai-agent-frontend
+    newTag: latest
+
+configMapGenerator:
+  - name: ai-agent-config
+    literals:
+      - CLUSTER_NAME=my-cce-cluster
+      - CLAUDE_MODEL=claude-opus-5-5
+      - CLAUDE_EFFORT=high
+      - CLAUDE_MAX_TOKENS=16000
+      - CLAUDE_FALLBACKS=default
+      - ENABLE_WRITE_TOOLS=true
+      - PROTECTED_NAMESPACES=kube-system,kube-public,kube-node-lease,monitoring
+      - MAX_REPLICAS=20
+      - MAX_WRITES_PER_APPROVAL=10
+      - AGENT_MAX_ITERATIONS=40
+      # Optional: comma-separated image prefixes set_container_image may use.
+      - ALLOWED_IMAGE_REGISTRIES=
+      # USD per million tokens, for the cost estimate shown in the UI only.
+      - PRICE_INPUT_PER_MTOK=4.00
+      - PRICE_OUTPUT_PER_MTOK=20.00
+      - PRICE_CACHE_WRITE_PER_MTOK=5.00
+      - PRICE_CACHE_READ_PER_MTOK=0.20
+      - LOG_LEVEL=INFO
+
+# Create these two files from the *.example files (they are git-ignored).
+secretGenerator:
+  - name: ai-agent-anthropic
+    envs:
+      - secrets/anthropic.env
+  - name: ai-agent-postgres
+    envs:
+      - secrets/postgres.env
